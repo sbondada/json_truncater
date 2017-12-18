@@ -66,6 +66,17 @@ class json_meta_data(object):
         string_item_count = len(self.get_str_map())
         return (self.get_json_str_size() - self.get_str_values_size()) + (MIN_STRING_LENGTH * string_item_count)
 
+    def update(self, string, truncated_str):
+        str_map = self.get_str_map()
+        return_ptr, key = str_map[string]
+        if return_ptr:
+            return_ptr[key] = truncated_str
+        else:
+            self.set_json_obj(truncated_str)
+        del str_map[string]
+        str_map[truncated_str] = return_ptr, key
+        self.set_truncated_json_str_size(self.get_truncated_json_str_size() - size(string) + size(truncated_str))
+
     # Parsing the json_object by doing a exploratory analysis of the json obj
     def parse(self):
         stack = list()
@@ -100,54 +111,31 @@ def process_line(line, max_bytes):
 
 
 def perform_word_boundary_compression(json_meta_data_obj, string, max_bytes):
-    json_str_size = size(json_meta_data_obj.get_json_str())
-    str_map = json_meta_data_obj.get_str_map()
-    return_ptr, key = str_map[string]
     word_list = string.split()
     if len(word_list) > 2:
         truncated_str = word_list[0] + TRAILING_ELLIPSES + word_list[-1]
-        truncated_str_size = json_str_size - size(string) + size(truncated_str)
+        truncated_str_size = json_meta_data_obj.get_json_str_size - size(string) + size(truncated_str)
         # trying to truncate a small part of the string instead of completely truncating the string
         if truncated_str_size < max_bytes:
             pass
     if size(truncated_str) < size(string):
-        return_ptr[key] = truncated_str
-        del str_map[string]
-        str_map[truncated_str] = return_ptr, key
-    updated_json_str_size = json_str_size - size(string) + size(truncated_str)
-    return updated_json_str_size
+        json_meta_data_obj.update(string, truncated_str)
 
 
 def perform_trim_space_compression(json_meta_data_obj, string, max_bytes):
-    str_map = json_meta_data_obj.get_str_map()
-    return_ptr, key = str_map[string]
     truncated_str = string.strip()
     if size(truncated_str) < size(string):
-        if return_ptr:
-            return_ptr[key] = truncated_str
-        else:
-            json_meta_data_obj.set_json_obj(truncated_str)
-        del str_map[string]
-        str_map[truncated_str] = return_ptr, key
-        json_meta_data_obj.set_truncated_json_str_size(json_meta_data_obj.get_truncated_json_str_size() - size(string) + size(truncated_str))
+        json_meta_data_obj.update(string, truncated_str)
 
 
 def perform_basic_compression(json_meta_data_obj, string, max_bytes):
-    str_map = json_meta_data_obj.get_str_map()
-    return_ptr, key = str_map[string]
     truncated_str = string[:MIN_CHAR_LENGTH] + TRAILING_ELLIPSES
     truncated_str_size = json_meta_data_obj.get_truncated_json_str_size() - size(string) + size(truncated_str)
     if truncated_str_size < max_bytes:
         correction = max_bytes - truncated_str_size
         truncated_str = string[:(correction+MIN_CHAR_LENGTH)] + TRAILING_ELLIPSES
     if size(truncated_str) < size(string):
-        if return_ptr:
-            return_ptr[key] = truncated_str
-        else:
-            json_meta_data_obj.set_json_obj(truncated_str)
-        del str_map[string]
-        str_map[truncated_str] = return_ptr, key
-        json_meta_data_obj.set_truncated_json_str_size(json_meta_data_obj.get_truncated_json_str_size() - size(string) + size(truncated_str))
+        json_meta_data_obj.update(string, truncated_str)
 
 
 def truncate(json_meta_data_obj, max_bytes):
@@ -155,16 +143,13 @@ def truncate(json_meta_data_obj, max_bytes):
     if json_meta_data_obj.get_max_truncated_str_size() > max_bytes:
         return ERROR_STRING
     if json_meta_data_obj.get_json_str_size() > max_bytes:
-        for string in json_meta_data_obj.get_str_map().keys():
-            if json_meta_data_obj.get_truncated_json_str_size() > max_bytes:
-                perform_trim_space_compression(json_meta_data_obj, string, max_bytes)
-            else:
-                break
-        for string in json_meta_data_obj.get_str_map().keys():
-            if json_meta_data_obj.get_truncated_json_str_size() > max_bytes:
-                perform_basic_compression(json_meta_data_obj, string, max_bytes)
-            else:
-                break
+        for apply_compression in [perform_trim_space_compression,
+                                  perform_basic_compression]:
+            for string in json_meta_data_obj.get_str_map().keys():
+                if json_meta_data_obj.get_truncated_json_str_size() > max_bytes:
+                    apply_compression(json_meta_data_obj, string, max_bytes)
+                else:
+                    break
     return json_meta_data_obj
 
 
