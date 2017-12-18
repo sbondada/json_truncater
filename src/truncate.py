@@ -9,13 +9,14 @@ MIN_STRING_LENGTH = 6
 TRAILING_ELLIPSES = "..."
 MIN_CHAR_LENGTH = 3
 ERROR_STRING = "<ERROR>"
+JOINER = " "
 
 
 def size(string):
     return len(string.encode('utf-8'))
 
 
-class json_meta_data(object):
+class JsonMetaData(object):
     def __init__(self, json_str):
         self.json_str = json_str
         self.json_obj = None
@@ -40,7 +41,7 @@ class json_meta_data(object):
             try:
                 self.json_obj = json.loads(self.json_str)
             except Exception as e:
-                print "incorrrect json format or some input error " + e.message
+                print "incorrrect json format or some input error :" + e.message
         return self.json_obj
 
     def set_json_obj(self, json_obj):
@@ -97,29 +98,27 @@ class json_meta_data(object):
         self.str_values_size, self.str_map = str_values_size, str_map
 
 
-def main(max_bytes, filename):
-    for line in fileinput.input(filename):
-        process_line(line, max_bytes)
-
-
-def process_line(line, max_bytes):
-    json_meta_data_obj = json_meta_data(line)
-    if truncate(json_meta_data_obj, max_bytes) != ERROR_STRING:
-        print json.dumps(json_meta_data_obj.get_json_obj())
-    else:
-        print ERROR_STRING
-
-
+# not done completely by its just a concept and works resonable. need to handle the edge cases
 def perform_word_boundary_compression(json_meta_data_obj, string, max_bytes):
     word_list = string.split()
-    if len(word_list) > 2:
-        truncated_str = word_list[0] + TRAILING_ELLIPSES + word_list[-1]
-        truncated_str_size = json_meta_data_obj.get_json_str_size - size(string) + size(truncated_str)
+    if len(word_list) >= 2:
+        max_truncated_str = word_list[0] + TRAILING_ELLIPSES + word_list[-1]
+        max_truncated_json_str_size = json_meta_data_obj.get_truncated_json_str_size() - size(string) + size(max_truncated_str)
+        truncated_str = max_truncated_str
         # trying to truncate a small part of the string instead of completely truncating the string
-        if truncated_str_size < max_bytes:
-            pass
-    if size(truncated_str) < size(string):
-        json_meta_data_obj.update(string, truncated_str)
+        if max_truncated_json_str_size < max_bytes:
+            truncated_json_str_size = json_meta_data_obj.get_truncated_json_str_size()
+            for index, word in enumerate(word_list[1:-1]):
+                if truncated_json_str_size + size(TRAILING_ELLIPSES) > max_bytes:
+                    word_list.remove(word)
+                    truncated_json_str_size = truncated_json_str_size - size(word)
+                else:
+                    break
+            if truncated_json_str_size < max_bytes:
+                word_list.insert(1, TRAILING_ELLIPSES)
+                truncated_str = JOINER.join(word_list)
+        if size(truncated_str) < size(string):
+            json_meta_data_obj.update(string, truncated_str)
 
 
 def perform_trim_space_compression(json_meta_data_obj, string, max_bytes):
@@ -138,19 +137,36 @@ def perform_basic_compression(json_meta_data_obj, string, max_bytes):
         json_meta_data_obj.update(string, truncated_str)
 
 
+COMPRESSION_ALGORITHMS = [perform_trim_space_compression,
+                          perform_basic_compression]
+
+
 def truncate(json_meta_data_obj, max_bytes):
     # quick failure by finding out if you can truncate the string or not
     if json_meta_data_obj.get_max_truncated_str_size() > max_bytes:
         return ERROR_STRING
     if json_meta_data_obj.get_json_str_size() > max_bytes:
-        for apply_compression in [perform_trim_space_compression,
-                                  perform_basic_compression]:
+        for apply_compression in COMPRESSION_ALGORITHMS:
             for string in json_meta_data_obj.get_str_map().keys():
                 if json_meta_data_obj.get_truncated_json_str_size() > max_bytes:
                     apply_compression(json_meta_data_obj, string, max_bytes)
                 else:
                     break
     return json_meta_data_obj
+
+
+def process_line(line, max_bytes):
+    json_meta_data_obj = JsonMetaData(line)
+    if truncate(json_meta_data_obj, max_bytes) != ERROR_STRING:
+        truncated_str = json.dumps(json_meta_data_obj.get_json_obj())
+        print truncated_str
+    else:
+        print ERROR_STRING
+
+
+def main(max_bytes, filename):
+    for line in fileinput.input(filename):
+        process_line(line, max_bytes)
 
 
 if __name__ == '__main__':
