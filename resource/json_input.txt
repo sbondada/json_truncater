@@ -1,2 +1,3 @@
-{"hello": "world is a very happy place to live"}
-{"some": {"nested":["objects are the best things invented",{}, 1234]}}
+"hi every one I am as good as it gets"
+{"hello": "world is a very happy place to live", "ram": { "har": "happy birthday"}}
+{"some": {"nested":["objects are the best things invented",{}, 1234, "love is impossible", "lock the potential and the wealth"]}}

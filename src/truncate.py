@@ -19,7 +19,7 @@ class json_meta_data(object):
     def __init__(self, json_str):
         self.json_str = json_str
         self.json_obj = None
-        self.obj_size = None
+        self.json_str_size = None
         self.truncated_json_str_size = None
         self.str_values_size = None
         self.str_map = None
@@ -39,14 +39,17 @@ class json_meta_data(object):
         if not self.json_obj:
             try:
                 self.json_obj = json.loads(self.json_str)
-            except Exception:
-                print "incorrrect json format or some input error"
+            except Exception as e:
+                print "incorrrect json format or some input error " + e.message
         return self.json_obj
 
+    def set_json_obj(self, json_obj):
+        self.json_obj = json_obj
+
     def get_json_str_size(self):
-        if not self.obj_size:
-           self.obj_size = size(self.json_str)
-        return self.obj_size
+        if not self.json_str_size:
+            self.json_str_size = size(self.json_str)
+        return self.json_str_size
 
     def get_str_values_size(self):
         if not self.str_values_size:
@@ -120,10 +123,13 @@ def perform_trim_space_compression(json_meta_data_obj, string, max_bytes):
     return_ptr, key = str_map[string]
     truncated_str = string.strip()
     if size(truncated_str) < size(string):
-        return_ptr[key] = truncated_str
+        if return_ptr:
+            return_ptr[key] = truncated_str
+        else:
+            json_meta_data_obj.set_json_obj(truncated_str)
         del str_map[string]
         str_map[truncated_str] = return_ptr, key
-        json_meta_data_obj.set_truncated_json_str_size(json_meta_data_obj.get_max_truncated_obj_size() - size(string) + size(truncated_str))
+        json_meta_data_obj.set_truncated_json_str_size(json_meta_data_obj.get_truncated_json_str_size() - size(string) + size(truncated_str))
 
 
 def perform_basic_compression(json_meta_data_obj, string, max_bytes):
@@ -135,10 +141,13 @@ def perform_basic_compression(json_meta_data_obj, string, max_bytes):
         correction = max_bytes - truncated_str_size
         truncated_str = string[:(correction+MIN_CHAR_LENGTH)] + TRAILING_ELLIPSES
     if size(truncated_str) < size(string):
-        return_ptr[key] = truncated_str
+        if return_ptr:
+            return_ptr[key] = truncated_str
+        else:
+            json_meta_data_obj.set_json_obj(truncated_str)
         del str_map[string]
         str_map[truncated_str] = return_ptr, key
-        json_meta_data_obj.set_truncated_json_str_size(json_meta_data_obj.get_max_truncated_str_size() - size(string) + size(truncated_str))
+        json_meta_data_obj.set_truncated_json_str_size(json_meta_data_obj.get_truncated_json_str_size() - size(string) + size(truncated_str))
 
 
 def truncate(json_meta_data_obj, max_bytes):
